@@ -1,60 +1,94 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const puzzleContainer = document.getElementById('puzzle-container');
+    const board = document.getElementById('board');
+    const movesNum = document.getElementById('moves-num');
+    const clearOverlay = document.getElementById('clear-overlay');
     const shuffleButton = document.getElementById('shuffle-button');
     const hintButton = document.getElementById('hint-button');
     const imageLoader = document.getElementById('image-loader');
-    const message = document.getElementById('message');
-    const tileCount = 9;
+    const sizeSeg = document.getElementById('size-seg');
+
+    let N = 3;
+    let order = [];       // order[domIndex] = 絵柄番号（N*N-1 が空き）
     let tiles = [];
+    let moves = 0;
+    let cleared = false;
+    let imgUrl = '520166-backgroundImage1.jpeg';
 
-    const solvedState = Array.from({ length: tileCount }, (_, i) => i);
-    const solvedStateString = solvedState.join(',');
-    let currentState = [...solvedState];
-
-    // For touch controls
+    // スワイプ用
     let touchStartX = 0;
     let touchStartY = 0;
     let touchStartDomIndex = -1;
 
-    function applyImage(imageUrl) {
-        tiles.forEach(tile => {
-            tile.style.backgroundImage = `url('${imageUrl}')`;
-        });
-    }
+    const emptyIndex = () => order.indexOf(N * N - 1);
 
-    function handleImageUpload(event) {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                applyImage(e.target.result);
-                shuffle();
-            };
-            reader.readAsDataURL(file);
-        }
-    }
-
-    function createPuzzle() {
-        puzzleContainer.innerHTML = '';
+    function buildBoard() {
+        board.innerHTML = '';
+        board.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
         tiles = [];
-        for (let i = 0; i < tileCount; i++) {
-            const tile = document.createElement('div');
-            tile.classList.add('puzzle-tile');
-            // Add click and touch listeners
-            tile.addEventListener('click', () => moveTile(i));
-            // Add passive: false to allow preventDefault
-            tile.addEventListener('touchstart', (e) => handleTouchStart(e, i), { passive: false });
-            tile.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-            tile.addEventListener('touchend', (e) => handleTouchEnd(e, i));
-            puzzleContainer.appendChild(tile);
-            tiles.push(tile);
+        for (let i = 0; i < N * N; i++) {
+            const t = document.createElement('div');
+            t.className = 'tile';
+            t.addEventListener('click', () => tryMove(i));
+            t.addEventListener('touchstart', (e) => handleTouchStart(e, i), { passive: false });
+            t.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+            t.addEventListener('touchend', (e) => handleTouchEnd(e, i));
+            board.appendChild(t);
+            tiles.push(t);
         }
-        applyImage('520166-backgroundImage1.jpeg');
         shuffle();
     }
 
+    function render() {
+        const last = N * N - 1;
+        tiles.forEach((t, i) => {
+            const v = order[i];
+            t.style.backgroundImage = `url('${imgUrl}')`;
+            t.style.backgroundSize = `${N * 100}% ${N * 100}%`;
+            t.style.backgroundPosition =
+                `${(v % N) / (N - 1) * 100}% ${Math.floor(v / N) / (N - 1) * 100}%`;
+            t.classList.toggle('empty', v === last && !cleared);
+        });
+        movesNum.textContent = moves;
+    }
+
+    function tryMove(i) {
+        if (cleared) return;
+        const e = emptyIndex();
+        const [r, c] = [Math.floor(i / N), i % N];
+        const [er, ec] = [Math.floor(e / N), e % N];
+        if (Math.abs(r - er) + Math.abs(c - ec) !== 1) return;
+        [order[i], order[e]] = [order[e], order[i]];
+        moves++;
+        render();
+        checkWin();
+    }
+
+    function shuffle() {
+        cleared = false;
+        clearOverlay.classList.remove('show');
+        moves = 0;
+        order = Array.from({ length: N * N }, (_, i) => i);
+        // 完成形からランダムに有効手を打つことで可解性を保証する
+        let prev = -1;
+        for (let k = 0; k < 80 * N * N; k++) {
+            const e = emptyIndex();
+            const [er, ec] = [Math.floor(e / N), e % N];
+            const cand = [];
+            if (er > 0) cand.push(e - N);
+            if (er < N - 1) cand.push(e + N);
+            if (ec > 0) cand.push(e - 1);
+            if (ec < N - 1) cand.push(e + 1);
+            const picks = cand.filter(x => x !== prev);
+            const pick = picks[Math.floor(Math.random() * picks.length)];
+            [order[e], order[pick]] = [order[pick], order[e]];
+            prev = e;
+        }
+        render();
+    }
+
+    /* ---- スワイプ操作 ---- */
     function handleTouchStart(event, domIndex) {
-        event.preventDefault(); // Prevent page from scrolling
+        event.preventDefault();
         touchStartDomIndex = domIndex;
         touchStartX = event.changedTouches[0].screenX;
         touchStartY = event.changedTouches[0].screenY;
@@ -63,97 +97,54 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleTouchEnd(event, domIndex) {
         if (touchStartDomIndex !== domIndex) return;
 
-        const touchEndX = event.changedTouches[0].screenX;
-        const touchEndY = event.changedTouches[0].screenY;
-        const dx = touchEndX - touchStartX;
-        const dy = touchEndY - touchStartY;
-        const swipeThreshold = 30; // Min distance for a swipe
+        const dx = event.changedTouches[0].screenX - touchStartX;
+        const dy = event.changedTouches[0].screenY - touchStartY;
+        const swipeThreshold = 30;
 
-        // If it's not a long enough swipe, we don't treat it as a click here
-        // because the 'click' event will still fire. We just handle the swipe.
-        if (Math.abs(dx) < swipeThreshold && Math.abs(dy) < swipeThreshold) {
-            return;
-        }
+        // スワイプ距離が短ければタップ扱い（click イベント側で処理）
+        if (Math.abs(dx) < swipeThreshold && Math.abs(dy) < swipeThreshold) return;
 
-        const emptyDomIndex = currentState.indexOf(8);
-        const [row, col] = [Math.floor(domIndex / 3), domIndex % 3];
-        const [emptyRow, emptyCol] = [Math.floor(emptyDomIndex / 3), emptyDomIndex % 3];
+        const e = emptyIndex();
+        const [row, col] = [Math.floor(domIndex / N), domIndex % N];
+        const [emptyRow, emptyCol] = [Math.floor(e / N), e % N];
 
-        if (Math.abs(dx) > Math.abs(dy)) { // Horizontal swipe
-            if (dx > 0 && row === emptyRow && col + 1 === emptyCol) moveTile(domIndex); // Swipe Right
-            else if (dx < 0 && row === emptyRow && col - 1 === emptyCol) moveTile(domIndex); // Swipe Left
-        } else { // Vertical swipe
-            if (dy > 0 && col === emptyCol && row + 1 === emptyRow) moveTile(domIndex); // Swipe Down
-            else if (dy < 0 && col === emptyCol && row - 1 === emptyRow) moveTile(domIndex); // Swipe Up
+        if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0 && row === emptyRow && col + 1 === emptyCol) tryMove(domIndex);
+            else if (dx < 0 && row === emptyRow && col - 1 === emptyCol) tryMove(domIndex);
+        } else {
+            if (dy > 0 && col === emptyCol && row + 1 === emptyRow) tryMove(domIndex);
+            else if (dy < 0 && col === emptyCol && row - 1 === emptyRow) tryMove(domIndex);
         }
     }
 
-    function updateTileClasses() {
-        tiles.forEach((tile, i) => {
-            const tileValue = currentState[i];
-            const x = (tileValue % 3) * 100;
-            const y = Math.floor(tileValue / 3) * 100;
-            tile.style.backgroundPosition = `-${x}px -${y}px`;
-            tile.classList.toggle('empty', tileValue === 8);
-        });
+    /* ---- ヒント ---- */
+    function manhattanOf(i, v) {
+        return Math.abs(Math.floor(i / N) - Math.floor(v / N)) + Math.abs(i % N - v % N);
     }
 
-    function moveTile(clickedDomIndex) {
-        const emptyDomIndex = currentState.indexOf(8);
-        const [row, col] = [Math.floor(clickedDomIndex / 3), clickedDomIndex % 3];
-        const [emptyRow, emptyCol] = [Math.floor(emptyDomIndex / 3), emptyDomIndex % 3];
-
-        if ((Math.abs(row - emptyRow) + Math.abs(col - emptyCol)) === 1) {
-            [currentState[clickedDomIndex], currentState[emptyDomIndex]] = [currentState[emptyDomIndex], currentState[clickedDomIndex]];
-            updateTileClasses();
-            checkWin();
-        }
-    }
-
-    function shuffle() {
-        message.textContent = '';
-        currentState = [...solvedState];
-        for (let i = currentState.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [currentState[i], currentState[j]] = [currentState[j], currentState[i]];
-        }
-        if (!isSolvable(currentState)) {
-            if (currentState.length > 1) [currentState[0], currentState[1]] = [currentState[1], currentState[0]];
-        }
-        updateTileClasses();
-    }
-    
-    function isSolvable(puzzle) {
-        let inversions = 0;
-        const puzzleWithoutEmpty = puzzle.filter(val => val !== 8);
-        for (let i = 0; i < puzzleWithoutEmpty.length - 1; i++) {
-            for (let j = i + 1; j < puzzleWithoutEmpty.length; j++) {
-                if (puzzleWithoutEmpty[i] > puzzleWithoutEmpty[j]) inversions++;
-            }
-        }
-        return inversions % 2 === 0;
-    }
-
-    function calculateManhattanDistance(state) {
-        let totalDistance = 0;
+    function totalManhattan(state) {
+        const last = N * N - 1;
+        let total = 0;
         for (let i = 0; i < state.length; i++) {
-            const value = state[i];
-            if (value !== 8) {
-                const [currentRow, currentCol] = [Math.floor(i / 3), i % 3];
-                const [correctRow, correctCol] = [Math.floor(value / 3), value % 3];
-                totalDistance += Math.abs(currentRow - correctRow) + Math.abs(currentCol - correctCol);
-            }
+            if (state[i] !== last) total += manhattanOf(i, state[i]);
         }
-        return totalDistance;
+        return total;
     }
 
-    function showHint() {
+    function flashHint(domIndex) {
+        tiles[domIndex].classList.add('hint');
+        setTimeout(() => tiles[domIndex].classList.remove('hint'), 700);
+    }
+
+    // 3×3: A* で最適手を出す
+    function hintAStar() {
+        const last = N * N - 1;
+        const solvedString = Array.from({ length: N * N }, (_, i) => i).join(',');
         const openSet = new Map();
         const closedSet = new Set();
-        const startStateString = currentState.join(',');
-        const startNode = { state: currentState, g: 0, h: calculateManhattanDistance(currentState), parent: null };
+        const startNode = { state: order, g: 0, h: totalManhattan(order), parent: null };
         startNode.f = startNode.h;
-        openSet.set(startStateString, startNode);
+        openSet.set(order.join(','), startNode);
 
         while (openSet.size > 0) {
             let bestNode = null;
@@ -161,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (bestNode === null || node.f < bestNode.f) bestNode = node;
             }
             const bestStateString = bestNode.state.join(',');
-            if (bestStateString === solvedStateString) {
+            if (bestStateString === solvedString) {
                 let path = [];
                 let current = bestNode;
                 while (current.parent) {
@@ -169,54 +160,86 @@ document.addEventListener('DOMContentLoaded', () => {
                     current = current.parent;
                 }
                 path.reverse();
-                if (path.length > 0) {
-                    const nextState = path[0].state;
-                    const emptyIndexAfter = nextState.indexOf(8);
-                    tiles[emptyIndexAfter].classList.add('hint');
-                    setTimeout(() => { tiles[emptyIndexAfter].classList.remove('hint'); }, 500);
-                }
+                if (path.length > 0) flashHint(path[0].state.indexOf(last));
                 return;
             }
             openSet.delete(bestStateString);
             closedSet.add(bestStateString);
-            const emptyIndex = bestNode.state.indexOf(8);
-            const [emptyRow, emptyCol] = [Math.floor(emptyIndex / 3), emptyIndex % 3];
-            for (let i = 0; i < tileCount; i++) {
-                const [row, col] = [Math.floor(i / 3), i % 3];
-                if (Math.abs(row - emptyRow) + Math.abs(col - emptyCol) === 1) {
-                    const neighborState = [...bestNode.state];
-                    [neighborState[i], neighborState[emptyIndex]] = [neighborState[emptyIndex], neighborState[i]];
-                    const neighborStateString = neighborState.join(',');
-                    if (closedSet.has(neighborStateString)) continue;
-                    const gScore = bestNode.g + 1;
-                    let neighborNode = openSet.get(neighborStateString);
-                    if (!neighborNode || gScore < neighborNode.g) {
-                        if (!neighborNode) neighborNode = {};
-                        neighborNode.parent = bestNode;
-                        neighborNode.state = neighborState;
-                        neighborNode.g = gScore;
-                        neighborNode.h = calculateManhattanDistance(neighborState);
-                        neighborNode.f = neighborNode.g + neighborNode.h;
-                        openSet.set(neighborStateString, neighborNode);
-                    }
+            const e = bestNode.state.indexOf(last);
+            const [er, ec] = [Math.floor(e / N), e % N];
+            for (let i = 0; i < N * N; i++) {
+                const [r, c] = [Math.floor(i / N), i % N];
+                if (Math.abs(r - er) + Math.abs(c - ec) !== 1) continue;
+                const neighborState = [...bestNode.state];
+                [neighborState[i], neighborState[e]] = [neighborState[e], neighborState[i]];
+                const neighborStateString = neighborState.join(',');
+                if (closedSet.has(neighborStateString)) continue;
+                const gScore = bestNode.g + 1;
+                let neighborNode = openSet.get(neighborStateString);
+                if (!neighborNode || gScore < neighborNode.g) {
+                    if (!neighborNode) neighborNode = {};
+                    neighborNode.parent = bestNode;
+                    neighborNode.state = neighborState;
+                    neighborNode.g = gScore;
+                    neighborNode.h = totalManhattan(neighborState);
+                    neighborNode.f = neighborNode.g + neighborNode.h;
+                    openSet.set(neighborStateString, neighborNode);
                 }
             }
         }
     }
 
+    // 4×4: 貪欲法（A* は状態数が多く固まる恐れがあるため）
+    function hintGreedy() {
+        const e = emptyIndex();
+        const [er, ec] = [Math.floor(e / N), e % N];
+        let best = -1, bestGain = -Infinity;
+        [[er - 1, ec], [er + 1, ec], [er, ec - 1], [er, ec + 1]].forEach(([r, c]) => {
+            if (r < 0 || r >= N || c < 0 || c >= N) return;
+            const i = r * N + c;
+            const gain = manhattanOf(i, order[i]) - manhattanOf(e, order[i]);
+            if (gain > bestGain) { bestGain = gain; best = i; }
+        });
+        if (best >= 0) flashHint(best);
+    }
+
+    function showHint() {
+        if (cleared) return;
+        if (N === 3) hintAStar();
+        else hintGreedy();
+    }
+
+    /* ---- クリア ---- */
     function checkWin() {
-        if (currentState.join(',') === solvedStateString) {
-            message.textContent = 'Congratulations! You solved it!';
-            const emptyTile = tiles.find((tile, i) => currentState[i] === 8);
-            if (emptyTile) emptyTile.classList.remove('empty');
-        } else {
-            message.textContent = '';
+        if (order.every((v, i) => v === i)) {
+            cleared = true;
+            render(); // 空きマスにも絵を表示して完成画にする
+            clearOverlay.classList.add('show');
         }
     }
 
+    /* ---- イベント ---- */
     shuffleButton.addEventListener('click', shuffle);
     hintButton.addEventListener('click', showHint);
-    imageLoader.addEventListener('change', handleImageUpload);
 
-    createPuzzle();
+    sizeSeg.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('button');
+        if (!btn) return;
+        sizeSeg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+        N = Number(btn.dataset.n);
+        buildBoard();
+    });
+
+    imageLoader.addEventListener('change', (ev) => {
+        const file = ev.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            imgUrl = e.target.result;
+            shuffle();
+        };
+        reader.readAsDataURL(file);
+    });
+
+    buildBoard();
 });

@@ -3,23 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3x3 Puzzle Game</title>
+    <meta name="theme-color" content="#0e1220">
+    <title>するする パズル</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <a id="portal-link" href="https://tkzlab.github.io/game-portal/">🏠 ポータルへ</a>
-    <style>
-    #portal-link{position:fixed;top:10px;left:10px;z-index:9999;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.92);color:#555;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 2px 6px rgba(0,0,0,.18);}
-    #portal-link:hover{background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.28);}
-    </style>
-    <h1>3x3 Image Puzzle</h1>
-    <div id="puzzle-container"></div>
-    <div id="message"></div>
-    <button id="shuffle-button">Shuffle</button>
-    <button id="hint-button">Hint</button>
-    <input type="file" id="image-loader" accept="image/*" style="display: none;">
-    <label for="image-loader" class="button-like">Change Image</label>
-    <p>推奨画像: 300x300ピクセル以上の正方形の画像</p>
+    <a class="portal-link" href="https://tkzlab.github.io/game-portal/">🏠 ポータルへ</a>
+
+    <h1>するする パズル</h1>
+    <p class="tagline">えを うごかして もとどおりに しよう！</p>
+
+    <div class="card">
+        <div class="status-row">
+            <div class="moves">うごかした かず<b id="moves-num">0</b></div>
+            <div class="seg" id="size-seg" role="group" aria-label="ばんめんの おおきさ">
+                <button type="button" data-n="3" class="on">3×3</button>
+                <button type="button" data-n="4">4×4</button>
+            </div>
+        </div>
+
+        <div class="board-wrap">
+            <div id="board" aria-label="パズルばんめん"></div>
+            <div class="clear-overlay" id="clear-overlay">
+                <div class="clear-stars" aria-hidden="true"><span>⭐</span><span>🌟</span><span>⭐</span></div>
+                <div class="clear-text">できた！すばらしい！</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button type="button" class="btn primary" id="shuffle-button">まぜる</button>
+            <button type="button" class="btn" id="hint-button">ヒント</button>
+            <label class="btn" for="image-loader">えをかえる</label>
+        </div>
+        <input type="file" id="image-loader" accept="image/*" style="display:none">
+        <p class="note">ましかくの えが おすすめ だよ</p>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>
