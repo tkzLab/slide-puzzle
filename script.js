@@ -6,13 +6,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const hintButton = document.getElementById('hint-button');
     const imageLoader = document.getElementById('image-loader');
     const sizeSeg = document.getElementById('size-seg');
+    const picker = document.getElementById('picker');
 
     let N = 3;
     let order = [];       // order[domIndex] = 絵柄番号（N*N-1 が空き）
     let tiles = [];
     let moves = 0;
     let cleared = false;
-    let imgUrl = '520166-backgroundImage1.jpeg';
+    let imgUrl = 'img/farm-1.jpg';
 
     // スワイプ用
     let touchStartX = 0;
@@ -230,16 +231,26 @@ document.addEventListener('DOMContentLoaded', () => {
         buildBoard();
     });
 
+    picker.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('button');
+        if (!btn) return;
+        picker.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+        imgUrl = btn.dataset.img;
+        shuffle();
+    });
+
     imageLoader.addEventListener('change', (ev) => {
         const file = ev.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
             imgUrl = e.target.result;
+            picker.querySelectorAll('button').forEach(b => b.classList.remove('on'));
             shuffle();
         };
         reader.readAsDataURL(file);
     });
 
+    picker.querySelector(`button[data-img="${imgUrl}"]`).classList.add('on');
     buildBoard();
 });
